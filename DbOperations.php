@@ -143,31 +143,26 @@
 
     //CRUD for chamas
 
-    public function createChama($chama_name, $description){
-
-        //get user_id from currently logged in user
+    public function createChama($chama_name, $description, $contribution_period, $system_flow) {
+        // Get user_id from the currently logged-in user
         $user_id = $_SESSION['userId'];
-
+    
         // Prepare statement to insert chama into chama table
-        $stmt= $this->con->prepare("INSERT INTO `chama` (`chama_id`,`chama_name`,`description`,`chairperson_id`) VALUES(NULL, ?, ?, '$user_id');");
-        // $sql = "INSERT INTO chama (chama_name , description, user_id) VALUES (:nchama, :desc, :userId)";
-        // $stmt =  $this->con->prepare($sql);
-        $stmt->bind_param("ss", $chama_name, $description);
-
-
-        if($stmt->execute()){
-
-           // Get the last inserted chama_id
-           $chama_id = $this->con->insert_id;
-           // Insert the user who created the chama into the chama_user table as admin
-           $stmt = $this->con->prepare("INSERT INTO `chamamembers` (`chama_id`, `user_id`, `chama_role`) VALUES (?, '$user_id', 'ChairPerson')");
-
-           $stmt->bind_param("s", $chama_id);
-           if($stmt->execute()){
-              return true;
-           }
+        $stmt = $this->con->prepare("INSERT INTO `chama` (`chama_id`, `chama_name`, `chama_description`, `chairperson_id`, `contribution_period`, `created_at`, `system_flow`) VALUES (NULL, ?, ?, ?, ?, NOW(), ?);");
+        $stmt->bind_param("sssss", $chama_name, $description, $user_id, $contribution_period, $system_flow);
+    
+        if ($stmt->execute()) {
+            // Get the last inserted chama_id
+            $chama_id = $this->con->insert_id;
+            // Insert the user who created the chama into the chama_user table as admin
+            $stmt = $this->con->prepare("INSERT INTO `chamamembers` (`chama_id`, `user_id`, `chama_role`) VALUES (?, ?, 'ChairPerson')");
+            $stmt->bind_param("ss", $chama_id, $user_id);
+    
+            if ($stmt->execute()) {
+                return true;
+            }
         }
-        
+    
         return false;
     }
      
@@ -181,13 +176,13 @@
     }
 
     //function to fetch all chamas
-    public function getAllChamas(){
+    public function getAllChamas() {
         $stmt = $this->con->prepare("SELECT * FROM chama");
         $stmt->execute();
         $result = $stmt->get_result();
         $chamas = array();
-        while($chama = $result->fetch_assoc()){
-        array_push($chamas, $chama);
+        while ($chama = $result->fetch_assoc()) {
+            $chamas[] = $chama;
         }
         return $chamas;
     }

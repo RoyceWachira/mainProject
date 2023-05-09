@@ -3,38 +3,39 @@
 // Start the session
 session_start();
 
-//path to access the fuctions in DbConnect
+// Path to access the functions in DbConnect
 require_once '../API/DbOperations.php';
 
-$response= array();
+$response = array();
 
-//check for correct request method
-if($_SERVER['REQUEST_METHOD']=='GET'){
-           
-    if(isset($_SESSION['username'])){
+// Check for correct request method
+if ($_SERVER['REQUEST_METHOD'] == 'GET') {
+    if (isset($_SESSION['username'])) {
+        $db = new DbOperation();
 
-        $db= new DbOperation();
+        if ($db) {
+            $users = $db->getAllUsers();
 
-        if($db->getAllUsers()){
-            $response['error']=false;
-            $response['message']="All Users fetched";
-
-        }else{
-                $response['error']=true;
-                $response['message']="Error fetching users";
+            if ($users) {
+                $response['error'] = false;
+                $response['message'] = "All users fetched";
+                $response['users'] = $users;
+            } else {
+                $response['error'] = true;
+                $response['message'] = "Error fetching chamas";
+            }
+        } else {
+            $response['error'] = true;
+            $response['message'] = "Database connection error";
+        }
+    } else {
+        $response['error'] = true;
+        $response['message'] = "Please login";
     }
-
-}else{
-    $response['error']=true;
-    $response['message']="Please login ";  
+} else {
+    $response['error'] = true;
+    $response['message'] = "Invalid Request";
 }
-
-}else{
-    $response['error']=true;
-    $response['message']="Invalid Request";
-}
-
-
 
 echo json_encode($response);
 
