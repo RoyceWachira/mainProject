@@ -2,7 +2,7 @@
 
 // Start the session
 session_start();
-
+$sid=session_id();
 // Path to access the functions in DbConnect
 require_once '../API/DbOperations.php';
 
@@ -13,16 +13,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 
         $db = new DbOperation();
 
+        $userId = $_GET['user_id'];
+
         if ($db) {
-            $chamas = $db->getAllChamas();
+            $chamas = $db->getChamasUserNotJoined($userId);
 
             if ($chamas) {
                 $response['error'] = false;
-                $response['message'] = "All chamas fetched";
-                $response['chamas'] = $chamas;
+                $response['chamas']= $chamas;
             } else {
                 $response['error'] = true;
-                $response['message'] = "Error fetching chamas";
+                $response['message'] = "No chamas available to join";
             }
         } else {
             $response['error'] = true;

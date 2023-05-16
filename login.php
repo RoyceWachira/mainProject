@@ -5,47 +5,49 @@ ini_set('display_errors', 1);
 
 //begin a session
 session_start();
-
+$sid=session_id();
 //path to access the functions in DbConnect
 require_once '../API/DbOperations.php';
 $response= array();
 
 //check for correct request method
-if($_SERVER["REQUEST_METHOD"]=="POST"){
-    if(empty($_POST["username"]) or empty($_POST["password"])){
+if($_SERVER['REQUEST_METHOD']=='POST'){
+    if(empty($_POST['username']) or empty($_POST['password'])){
 
-        $response["error"]=true;
-        $response["message"]="Required fields are missing";
+        $response['error']=true;
+        $response['message']="Required fields are missing";
 
     }else{
 
         //sanitize the inputs
-        $username = htmlspecialchars($_POST["username"], ENT_QUOTES, 'UTF-8');
-        $password = htmlspecialchars($_POST["password"], ENT_QUOTES, 'UTF-8');
+        $username = htmlspecialchars($_POST['username'], ENT_QUOTES, 'UTF-8');
+        $password = htmlspecialchars($_POST['password'], ENT_QUOTES, 'UTF-8');
         
         $db= new DbOperation();
         
         if($db->userLogin($username,$password)==1){
-            $user= $db->getUser($username);
-            $response["error"]=false;
-            $response["message"]="Login Successful";
+            $user= $db->getUsersession($username);
+            $response['error']=false;
+            $response['message']="Login Successful";
             $_SESSION['username']= $username;
             $_SESSION['userId']=$user['user_id'];
             $_SESSION['role']= $user['role'];
-            $response["userId"]=$_SESSION['userId'];
-            $response["username"]=$_SESSION['username'];
-            $response["role"]=$_SESSION['role'];
+            $response['userId']=$_SESSION['userId'];
+            $response['username']=$_SESSION['username'];
+            $response['role']=$_SESSION['role'];
+            $response['sId'] = $sid;
            
         }elseif($db->userLogin($username,$password)==2){
-            $user= $db->getUser($username);
-            $response["error"]=false;
-            $response["message"]="Welcome Admin"; 
+            $user= $db->getUsersession($username);
+            $response['error']=false;
+            $response['message']="Welcome Admin"; 
             $_SESSION['username']= $username;
             $_SESSION['userId']=$user['user_id'];
             $_SESSION['role']= $user['role'];
-            $response["userId"]=$_SESSION['userId'];
-            $response["username"]=$_SESSION['username'];
-            $response["role"]=$_SESSION['role'];
+            $response['userId']=$_SESSION['userId'];
+            $response['username']=$_SESSION['username'];
+            $response['role']=$_SESSION['role'];
+            $response['sId'] = $sid;
         }
         else{
             $response["error"]=true;

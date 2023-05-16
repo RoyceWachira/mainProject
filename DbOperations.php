@@ -17,13 +17,10 @@
     //function for creating a user
     public function createUser($firstName,$lastName,$userName,$phoneNumber,$email,$gender,$pass){
 
-        // Get the current datetime in MySQL datetime format
-        $createdAt = date('Y-m-d H:i:s');
-
         $password=password_hash($pass, PASSWORD_DEFAULT);
 
-        $stmt= $this->con->prepare("INSERT INTO `user` (`first_name`, `last_name`, `username`, `phone_number`, `email`, `gender`, `password`, `role`, `created_at`) VALUES( ?, ?, ?, ?, ?, ?, ? , 'user', ?);");
-        $stmt->bind_param("ssssssss",$firstName,$lastName,$userName,$phoneNumber,$email,$gender,$password, $createdAt);
+        $stmt= $this->con->prepare("INSERT INTO `user` (`first_name`, `last_name`, `username`, `phone_number`, `email`, `gender`, `password`, `role`, `created_at`) VALUES( ?, ?, ?, ?, ?, ?, ? , 'user', NOW());");
+        $stmt->bind_param("ssssssss",$firstName,$lastName,$userName,$phoneNumber,$email,$gender,$password);
     
          if($stmt->execute()){
             return true;
@@ -36,11 +33,8 @@
 
     public function updateUser($userId, $firstName, $lastName, $userName, $phoneNumber, $email, $gender) {
 
-        // Get the current datetime in MySQL datetime format
-        $updatedAt = date('Y-m-d H:i:s');
-
-        $stmt = $this->con->prepare("UPDATE user SET first_name = ?, last_name = ?, username = ?, tel_number = ?, email = ?, gender = ?, updated_at = ? WHERE user_id = ?");
-        $stmt->bind_param("sssssssi", $firstName, $lastName, $userName, $phoneNumber, $email, $gender, $updatedAt, $userId);
+        $stmt = $this->con->prepare("UPDATE user SET first_name = ?, last_name = ?, username = ?, phone_number = ?, email = ?, gender = ?, updated_at = NOW() WHERE user_id = ?");
+        $stmt->bind_param("ssssssi", $firstName, $lastName, $userName, $phoneNumber, $email, $gender, $userId);
     
         if ($stmt->execute()) {
             return true;
@@ -103,8 +97,15 @@
     
     
 
-    //function to fetch user by username
-    public function getUser($username){
+    //function to fetch user 
+    public function getUser($userId){
+        $stmt =  $this->con->prepare("SELECT * from user WHERE user_id= ?");
+        $stmt-> bind_param("s",$userId);
+        $stmt->execute();
+        return $stmt->get_result()->fetch_assoc();
+    }
+
+    public function getUsersession($username){
         $stmt =  $this->con->prepare("SELECT * from user WHERE username= ?");
         $stmt-> bind_param("s",$username);
         $stmt->execute();
@@ -121,6 +122,15 @@
             $users[] = $user;
         }
         return $users;
+    }
+
+    public function getTotalUserCount() {
+        $stmt = $this->con->prepare("SELECT COUNT(*) AS total_count FROM user");
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $totalCount = $row['total_count'];
+        return $totalCount;
     }
     
 
@@ -143,13 +153,11 @@
 
     //CRUD for chamas
 
-    public function createChama($chama_name, $description, $contribution_period, $system_flow) {
-        // Get user_id from the currently logged-in user
-        $user_id = $_SESSION['userId'];
+    public function createChama($chama_name, $description,$user_id, $contribution_period, $system_flow) {
     
         // Prepare statement to insert chama into chama table
-        $stmt = $this->con->prepare("INSERT INTO `chama` (`chama_id`, `chama_name`, `chama_description`, `chairperson_id`, `contribution_period`, `created_at`, `system_flow`) VALUES (NULL, ?, ?, ?, ?, NOW(), ?);");
-        $stmt->bind_param("sssss", $chama_name, $description, $user_id, $contribution_period, $system_flow);
+        $stmt = $this->con->prepare("INSERT INTO `chama` ( `chama_name`, `chama_description`, `chairperson_id`, `contribution_period`, `system_flow`, `created_at`) VALUES ( ?, ?, ?, ?, ?, NOW())");
+        $stmt->bind_param("ssiss", $chama_name, $description, $user_id, $contribution_period, $system_flow);
     
         if ($stmt->execute()) {
             // Get the last inserted chama_id
@@ -185,6 +193,17 @@
             $chamas[] = $chama;
         }
         return $chamas;
+    }
+
+
+
+    public function getTotalChamaCount() {
+        $stmt = $this->con->prepare("SELECT COUNT(*) AS total_count FROM chama");
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $totalCount = $row['total_count'];
+        return $totalCount;
     }
 
     public function updateChama($id, $chama_name, $description) {
@@ -237,6 +256,46 @@
         $stmt->store_result();
         return $stmt->num_rows > 0;
     }
+
+    public function isJoined($userId, $chamaId) {
+        $stmt = $this->con->prepare("SELECT user_id, chama_id FROM chamamembers WHERE user_id = ? AND chama_id = ?");
+        $stmt->bind_param("ii", $userId, $chamaId);
+        $stmt->execute();
+        $stmt->store_result();
+        return $stmt->num_rows > 0;
+    }
+
+    public function getChamasUserNotJoined($userId) {
+        $stmt = $this->con->prepare("SELECT chama_id FROM chamamembers WHERE user_id = ?");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $joinedChamas = array();
+        while ($chama = $result->fetch_assoc()) {
+            $joinedChamas[] = $chama['chama_id'];
+        }
+    
+        if (empty($joinedChamas)) {
+            // If the user has not joined any chama, return all chamas
+            $stmt = $this->con->prepare("SELECT * FROM chama");
+        } else {
+            // If the user has joined some chamas, retrieve chamas they have not joined
+            $stmt = $this->con->prepare("SELECT * FROM chama WHERE chama_id NOT IN (".implode(',', $joinedChamas).")");
+        }
+    
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $chamasNotJoined = array();
+        while ($row = $result->fetch_assoc()) {
+            $chamasNotJoined[] = $row;
+        }
+    
+        return $chamasNotJoined;
+    }
+    
+
+
+
     
     public function chamaExists($chama_name) {
         $stmt = $this->con->prepare("SELECT chama_id FROM chama WHERE chama_name = ?");
@@ -244,6 +303,19 @@
         $stmt->execute();
         $stmt->store_result();
         return $stmt->num_rows > 0;
+    }
+
+    public function getUserJoinedChamas($userId) {
+        $stmt = $this->con->prepare("SELECT chama.* FROM chama INNER JOIN chamamembers ON chama.chama_id = chamamembers.chama_id WHERE chamamembers.user_id = ?");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $chamas = array();
+        while ($chama = $result->fetch_assoc()) {
+            $chamas[] = $chama;
+        }
+        
+        return $chamas;
     }
 
     public function makeContribution($chamaId, $contributionAmount) {

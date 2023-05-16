@@ -14,15 +14,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         $db = new DbOperation();
 
         if ($db) {
-            $chamas = $db->getAllChamas();
+            $totalCount = $db->getTotalChamaCount();
 
-            if ($chamas) {
+            if ($totalCount) {
                 $response['error'] = false;
-                $response['message'] = "All chamas fetched";
-                $response['chamas'] = $chamas;
+                $response['totalChamas'] = $totalCount;
             } else {
                 $response['error'] = true;
-                $response['message'] = "Error fetching chamas";
+                $response['message'] = "Error fetching total";
             }
         } else {
             $response['error'] = true;
