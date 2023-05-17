@@ -262,7 +262,11 @@
         $stmt->bind_param("ii", $userId, $chamaId);
         $stmt->execute();
         $stmt->store_result();
-        return $stmt->num_rows > 0;
+        if($stmt->num_rows > 0){
+            return true;
+        }else{
+            return false;
+        }
     }
 
     public function getChamasUserNotJoined($userId) {
@@ -785,17 +789,11 @@
         return $stmt->num_rows > 0;
     }
 
-    public function requestToJoinChama($chamaId){
+    public function requestToJoinChama($chamaId,$userId){
 
-        // Get the current datetime in MySQL datetime format
-        $requestedAt = date('Y-m-d H:i:s');
-
-        //get user_id from currently logged in user
-        $userId = $_SESSION['userId'];
-
-        // Insert the contribution into the database
-        $stmt = $this->con->prepare("INSERT INTO `joinrequests` (`user_id`,`chama_id`, `requested_at`, `join_status`) VALUES (?, ?, ?, ?, ?, 'Pending' )");
-        $stmt->bind_param("iis", $userId, $chamaId,$requestedAt);
+        // Insert the request into the database
+        $stmt = $this->con->prepare("INSERT INTO `joinrequests` (`user_id`,`chama_id`, `requested_at`, `join_status`) VALUES (?, ?, NOW() , 'Pending' )");
+        $stmt->bind_param("ii", $userId, $chamaId);
     
         if ($stmt->execute()) {
             return true;
@@ -804,6 +802,28 @@
         }
 
     }
+
+    public function checkJoinRequestStatus($chamaId, $userId) {
+        // Prepare the query to check the join request status
+        $stmt = $this->con->prepare("SELECT join_status FROM joinrequests WHERE chama_id = ? AND user_id = ?");
+        $stmt->bind_param("ii", $chamaId, $userId);
+        $stmt->execute();
+        $stmt->store_result();
+    
+        // Check if a join request exists for the specified chama and user
+        if ($stmt->num_rows > 0) {
+            // Fetch the join status from the result
+            $stmt->bind_result($joinStatus);
+            $stmt->fetch();
+
+            if ($joinStatus == 'Pending') {
+                return true;
+            } else{
+                return false;
+            }
+        }
+    }
+    
 
     public function approveToJoinChama($chamaId, $userId, $requestId)
     {
