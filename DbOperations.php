@@ -132,6 +132,17 @@
         $totalCount = $row['total_count'];
         return $totalCount;
     }
+
+    public function getTotalMembersCount($chamaId) {
+        $stmt = $this->con->prepare("SELECT COUNT(*) AS total_members FROM chamamembers WHERE chama_id=?");
+        $stmt->bind_param("i",$chamaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $totalMembers = $row['total_members'];
+        return $totalMembers;
+    }
+    
     
 
     //function to check if user exists in db
@@ -361,9 +372,9 @@
     
 
     //function to fetch a single contribution 
-    public function getContribution($contributionId){
-        $stmt = $this->con->prepare("SELECT * FROM contributions WHERE contribution_id = ?");
-        $stmt->bind_param("i", $contributionId);
+    public function getMemberContribution($userId,$chamaId){
+        $stmt = $this->con->prepare("SELECT * FROM contributions WHERE user_id = ? AND chama_id=? ");
+        $stmt->bind_param("ii", $userId,$chamaId);
         $stmt->execute();
         $result = $stmt->get_result();
         return $result->fetch_assoc();
@@ -481,12 +492,10 @@
     }
 
     public function chargeFine($chamaId, $userId, $fineAmount, $fineReason) {
-        // Get the current datetime in MySQL datetime format
-        $finedAt = date('Y-m-d H:i:s');
         
         // Insert the fines into the database
-        $stmt = $this->con->prepare("INSERT INTO `fines` (`chama_id`, `user_id`, `fine_amount`, `fine_reason`, `date_fined`, `fine_status`) VALUES (?, ?, ?, ?, ?, 'Not Paid')");
-        $stmt->bind_param("iidss", $chamaId, $userId, $fineAmount, $fineReason, $finedAt);
+        $stmt = $this->con->prepare("INSERT INTO `fines` (`chama_id`, `user_id`, `fine_amount`, `fine_reason`, `date_fined`, `fine_status`) VALUES (?, ?, ?, ?, NOW(), 'Not Paid')");
+        $stmt->bind_param("iids", $chamaId, $userId, $fineAmount, $fineReason);
     
         if ($stmt->execute()) {
             return true;
@@ -532,7 +541,7 @@
     }
 
     public function getChamaMembers($chamaId){
-        $stmt = $this->con->prepare("SELECT user.* FROM user INNER JOIN chamamembers ON chamamembers.user_id = user.user_id WHERE chamamembers.chama_id = ?");
+        $stmt = $this->con->prepare("SELECT user.*, chamamembers.* FROM user INNER JOIN chamamembers ON chamamembers.user_id = user.user_id WHERE chamamembers.chama_id = ?");
         $stmt->bind_param("i", $chamaId);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -542,9 +551,10 @@
         }
         return $members;
     }
+    
 
     public function getTotalContributions($chamaId) {
-        $stmt = $this->con->prepare("SELECT SUM(contribution_amount) as total_contributions FROM contributions WHERE chama_id = ?");
+        $stmt = $this->con->prepare("SELECT IFNULL(SUM(contribution_amount), 0) as total_contributions FROM contributions WHERE chama_id = ?");
         $stmt->bind_param("i", $chamaId);
         if (!$stmt->execute()) {
             throw new Exception("Error executing the SELECT statement: " . $stmt->error);
@@ -556,7 +566,7 @@
     }
     
     public function getTotalWithdrawals($chamaId) {
-        $stmt = $this->con->prepare("SELECT SUM(withdrawal_amount) as total_withdrawals FROM withdrawals WHERE chama_id = ?");
+        $stmt = $this->con->prepare("SELECT IFNULL(SUM(withdrawal_amount), 0) as total_withdrawals FROM withdrawals WHERE chama_id = ?");
         $stmt->bind_param("i", $chamaId);
         if (!$stmt->execute()) {
             throw new Exception("Error executing the SELECT statement: " . $stmt->error);
@@ -568,7 +578,7 @@
     }
 
     public function getTotalFines($chamaId) {
-        $stmt = $this->con->prepare("SELECT SUM(fine_amount) as total_fines FROM fines WHERE chama_id = ?");
+        $stmt = $this->con->prepare("SELECT IFNULL(SUM(fine_amount), 0) as total_fines FROM fines WHERE chama_id = ?");
         $stmt->bind_param("i", $chamaId);
         if (!$stmt->execute()) {
             throw new Exception("Error executing the SELECT statement: " . $stmt->error);
@@ -579,8 +589,19 @@
         return $total_fines;
     }
 
+    public function getTotalChamaFunds($chamaId) {
+        $totalContributions = $this->getTotalWithdrawals($chamaId);
+        $totalWithdrawals = $this->getTotalContributions($chamaId);
+        $totalFines = $this->getTotalFines($chamaId);
+    
+        // Calculate the total funds in the chama
+        $totalFunds = ($totalContributions+ $totalFines)-$totalWithdrawals;
+    
+        return $totalFunds;
+    }
+
     public function getTotalFinesForMemberInChama($chamaId, $userId) {
-        $stmt = $this->con->prepare("SELECT SUM(fine_amount) AS total_member_fines FROM fines WHERE chama_id = ? AND user_id = ?");
+        $stmt = $this->con->prepare("SELECT IFNULL(COUNT(*),0) AS total_member_fines FROM fines WHERE chama_id = ? AND user_id = ?");
         $stmt->bind_param("ii", $chamaId, $userId);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -590,8 +611,18 @@
     }
 
 
+    public function getTotalLoansForMemberInChama($chamaId, $userId) {
+        $stmt = $this->con->prepare("SELECT IFNULL(COUNT(*),0) AS total_member_loans FROM loans WHERE chama_id = ? AND user_id = ? AND loan_status= 'verified' ");
+        $stmt->bind_param("ii", $chamaId, $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $total_member_loans = $row['total_member_loans'];
+        return $total_member_loans;
+    }
+
     public function getTotalContributionsForMemberInChama($chamaId, $userId) {
-        $stmt = $this->con->prepare("SELECT SUM(contribution_amount) AS total_member_contributions FROM contributions WHERE chama_id = ? AND user_id = ?");
+        $stmt = $this->con->prepare("SELECT IFNULL(COUNT(*),0) AS total_member_contributions FROM contributions WHERE chama_id = ? AND user_id = ?");
         $stmt->bind_param("ii", $chamaId, $userId);
         $stmt->execute();
         $result = $stmt->get_result();
