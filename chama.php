@@ -12,7 +12,7 @@ $response= array();
 if($_SERVER['REQUEST_METHOD']=='POST'){
 
     //check for fields if set or empty
-    if(empty($_POST['chama_name']) or empty($_POST['description']) or empty($_POST['contribution_period']) or empty($_POST['system_flow']) ){
+    if(empty($_POST['chama_name']) or empty($_POST['description']) or empty($_POST['contribution_period']) or empty($_POST['system_flow']) or empty($_POST['contribution_target']) ){
 
         $response['error']=true;
         $response['message']="Required fields are missing";
@@ -23,6 +23,7 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
         $description = htmlspecialchars($_POST['description'], ENT_QUOTES, 'UTF-8'); 
         $contribution_period= htmlspecialchars($_POST['contribution_period'], ENT_QUOTES, 'UTF-8'); 
         $system_flow= htmlspecialchars($_POST['system_flow'], ENT_QUOTES, 'UTF-8'); 
+        $contribution_target= htmlspecialchars($_POST['contribution_target'], ENT_QUOTES, 'UTF-8');
 
         $db= new DbOperation();
 
@@ -33,7 +34,7 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
             $response['message']="Chama already Exists";
             
         }else{
-            if($db->createChama($chama_name, $description,$user_id,$contribution_period,$system_flow)){
+            if($db->createChama($chama_name, $description,$user_id,$contribution_period,$contribution_target,$system_flow)){
                 $response['error']=false;
                 $response['message']="Chama Created Successfully";
             }

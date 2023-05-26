@@ -164,11 +164,11 @@
 
     //CRUD for chamas
 
-    public function createChama($chama_name, $description,$user_id, $contribution_period, $system_flow) {
+    public function createChama($chama_name, $description,$user_id, $contribution_period, $system_flow,$contribution_target) {
     
         // Prepare statement to insert chama into chama table
-        $stmt = $this->con->prepare("INSERT INTO `chama` ( `chama_name`, `chama_description`, `chairperson_id`, `contribution_period`, `system_flow`, `created_at`) VALUES ( ?, ?, ?, ?, ?, NOW())");
-        $stmt->bind_param("ssiss", $chama_name, $description, $user_id, $contribution_period, $system_flow);
+        $stmt = $this->con->prepare("INSERT INTO `chama` ( `chama_name`, `chama_description`, `chairperson_id`, `contribution_period`,`contribution_target`, `system_flow`, `created_at`) VALUES ( ?, ?, ?, ?, ?, ?, NOW())");
+        $stmt->bind_param("ssisds", $chama_name, $description, $user_id, $contribution_period,$contribution_target, $system_flow);
     
         if ($stmt->execute()) {
             // Get the last inserted chama_id
@@ -333,13 +333,10 @@
         return $chamas;
     }
 
-    public function makeContribution($chamaId, $contributionAmount) {
+    public function makeContribution($chamaId, $userId,$contributionAmount) {
 
         // Get the current datetime in MySQL datetime format
         $contributedAt = date('Y-m-d H:i:s');
-    
-        //get user_id from currently logged in user
-        $userId = $_SESSION['userId'];
     
         // Get the contribution period for the specified chama
         $stmt = $this->con->prepare("SELECT contribution_period FROM chama WHERE chama_id = ?");
@@ -355,8 +352,8 @@
             }
         }
     
-        // Calculate the next contribution date by adding the contribution period to the current date and time
-        $nextContributionDate = date('Y-m-d H:i:s', strtotime($contributedAt . ' + ' . $contributionPeriod));
+        $nextContributionDate = date('Y-m-d H:i:s', strtotime("+{$contributionPeriod} days", strtotime($contributedAt))); 
+        
     
         // Insert the contribution into the database
         $stmt = $this->con->prepare("INSERT INTO `contributions` (`chama_id`, `user_id`, `contribution_amount`, `contribution_date`, `next_contribution_date`) VALUES (?, ?, ?, ?, ?)");
@@ -590,8 +587,8 @@
     }
 
     public function getTotalChamaFunds($chamaId) {
-        $totalContributions = $this->getTotalWithdrawals($chamaId);
-        $totalWithdrawals = $this->getTotalContributions($chamaId);
+        $totalContributions = $this->getTotalContributions($chamaId);
+        $totalWithdrawals = $this->getTotalWithdrawals($chamaId);
         $totalFines = $this->getTotalFines($chamaId);
     
         // Calculate the total funds in the chama
@@ -1009,6 +1006,100 @@
             throw $e;
         }
     }
+
+    public function performAllocation($chamaId)
+    {
+        // Get the chama system flow and contribution target from the chama table
+        $stmt = $this->con->prepare("SELECT system_flow, contribution_target FROM chama WHERE chama_id = ?");
+        $stmt->bind_param("i", $chamaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($row = $result->fetch_assoc()) {
+            $systemFlow = $row['system_flow'];
+            $totalAllocationSum = $row['contribution_target'];
+            
+            // Check if the system flow is "Merry Go Round"
+            if ($systemFlow === "merry-go-round") {
+                if ($totalAllocationSum === 0) {
+                    throw new Exception("No funds available for allocation in the chama.");
+                }
+                
+                $members = $this->getChamaMembers($chamaId);
+                shuffle($members);
+                
+                foreach ($members as $member) {
+                    $memberId = $member['member_id'];
+                    
+                    // Check if the member has already been allocated in the allocations table
+                    $stmt = $this->con->prepare("SELECT * FROM allocations WHERE chama_id = ? AND member_id = ?");
+                    $stmt->bind_param("ii", $chamaId, $memberId);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    
+                    if ($result->num_rows === 0 && $totalAllocationSum > 0) {
+                        
+                        $stmt = $this->con->prepare("INSERT INTO `allocations` (`chama_id`, `member_id`, `allocation_amount`) VALUES (?, ?, ?)");
+                        $stmt->bind_param("iid", $chamaId, $memberId, $allocationAmount);
+                        $stmt->execute();
+        
+                        
+                        return true;
+                    }else{
+                        throw new Exception("No funds available for allocation in the chama.");
+                    }
+                }
+                
+                // If all members have been allocated, reset the allocation
+                $stmt = $this->con->prepare("DELETE FROM allocations WHERE chama_id = ?");
+                $stmt->bind_param("i", $chamaId);
+                $stmt->execute();
+            }
+        } else {
+            throw new Exception("Error fetching the system flow and contribution target from the chama table.");
+        }
+        
+        return false;
+    }
+    
+    
+    public function getMemberLoans($chamaId,$userId){
+        $stmt = $this->con->prepare("SELECT * FROM loans  WHERE chama_id = ? AND user_id=? ");
+        $stmt->bind_param("ii", $chamaId,$userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $loans = array();
+        while ($row = $result->fetch_assoc()){
+            $loans[] = $row;
+        }
+        return $loans;
+    }
+
+    public function getMemberContributions($chamaId,$userId){
+        $stmt = $this->con->prepare("SELECT * FROM contributions  WHERE chama_id = ? AND user_id=? ");
+        $stmt->bind_param("ii", $chamaId,$userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $contributions = array();
+        while ($row = $result->fetch_assoc()){
+            $contributions[] = $row;
+        }
+        return $contributions;
+    }
+
+    public function getMemberFines($chamaId,$userId){
+        $stmt = $this->con->prepare("SELECT * FROM fines  WHERE chama_id = ? AND user_id=? ");
+        $stmt->bind_param("ii", $chamaId,$userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $fines = array();
+        while ($row = $result->fetch_assoc()){
+            $fines[] = $row;
+        }
+        return $fines;
+    }
+            
+
 
     
         
