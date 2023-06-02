@@ -628,9 +628,9 @@
         return $total_member_contributions;
     }
 
-    public function hasLeadershipRole($userId) {
-        $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE user_id = ?");
-        $stmt->bind_param("i", $userId);
+    public function hasLeadershipRole($userId,$chamaId) {
+        $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE user_id = ? AND chama_id= ? ");
+        $stmt->bind_param("ii", $userId, $chamaId);
         $stmt->execute();
         $role = $stmt->store_result();
         $stmt->bind_result($role);
@@ -1098,6 +1098,52 @@
         }
         return $fines;
     }
+
+
+
+    // public function sendNotification($memberId, $notificationContent) {
+    //     $url = "https://your-app.com/send_notification.php";
+
+    //     $data = array(
+    //         'memberId' => $memberId,
+    //         'notificationContent' => $notificationContent
+    //     );
+        
+    //     // Make the API request using cURL
+    //     $ch = curl_init($url);
+    //     curl_setopt($ch, CURLOPT_POST, true);
+    //     curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+    //     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    //     $response = curl_exec($ch);
+    //     curl_close($ch);
+        
+    //     return $response;
+    // }
+    
+    // // Example usage in the sendContributionNotification() function
+    // public function sendContributionNotification($chamaId, $userId, $contributionAmount) {
+    //     // Retrieve the member list
+    //     $members = $this->getChamaMembers($chamaId);
+        
+    //     // Get the name of the member making the contribution
+    //     $contributorName = $this->getMemberName($userId);
+        
+    //     // Generate the notification content
+    //     $notificationContent = "Member {$contributorName} has made a contribution of {$contributionAmount}.";
+        
+    //     // Send the notification to all members
+    //     foreach ($members as $member) {
+    //         $memberId = $member['member_id'];
+            
+    //         // Skip sending notification to the contributor
+    //         if ($memberId == $userId) {
+    //             continue;
+    //         }
+
+    //         $this->sendNotification($memberId, $notificationContent);
+    //     }
+    // }
+    
             
 
 
