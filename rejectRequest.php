@@ -17,19 +17,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         if ($db) {
             $chamaId = $_GET['chama_id'];
-            $loanId = $_GET['loan_id'];
+            $requestId = $_GET['request_id'];
             $userId = $_GET['user_id'];
 
-            if (!$db->ifLoanExist($loanId)) {
+            if (!$db->ifRequestExist($requestId)) {
                 $response['error'] = true;
                 $response['message'] = "This record doesn't exist";
             } else {
-                if ($db->approveLoan($chamaId, $loanId, $userId)) {
+                if ($db->rejectToJoinChama($chamaId, $userId, $requestId)) {
                     $response['error'] = false;
-                    $response['message'] = "Loan Approved Successfully";
+                    $response['message'] = "Request Denied Successfully";
                 } else {
                     $response['error'] = true;
-                    $response['message'] = "Error Approving Loan";
+                    $response['message'] = "Error Rejecting member";
                 }
             }
         } else {

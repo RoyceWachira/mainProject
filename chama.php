@@ -34,7 +34,7 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
             $response['message']="Chama already Exists";
             
         }else{
-            if($db->createChama($chama_name, $description,$user_id,$contribution_period,$contribution_target,$system_flow)){
+            if($db->createChama($chama_name, $description,$user_id,$contribution_period, $contribution_target,$system_flow)){
                 $response['error']=false;
                 $response['message']="Chama Created Successfully";
             }

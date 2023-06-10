@@ -14,23 +14,23 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 
         $db= new DbOperation();
 
-        $chama_id = $_GET['chama_id'];
-        $user_id = $_GET['user_id'];
+        $chamaId = $_GET['chama_id'];
+        $userId = $_GET['user_id'];
 
-        if($db->isJoined($user_id,$chama_id)){
+        if($db->isJoined($userId,$chamaId)){
 
             $response['error']=true;
             $response['message']="You are already a member of this chama";
 
-        }elseif($db->checkJoinRequestStatus($chama_id,$user_id)){
+        }elseif($db->checkJoinRequestStatus($chamaId,$userId)){
 
             $response['error']=true;
             $response['message']="You already requested to join this chama";
 
         }else{
             if($db->requestToJoinChama(
-                $chama_id,
-                $user_id  
+                $chamaId,
+                $userId  
             )){
                 $response['error']=false;
                 $response['message']="Request Submitted Successfully";

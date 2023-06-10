@@ -13,14 +13,12 @@ $response= array();
 if($_SERVER['REQUEST_METHOD']=='POST'){
 
     //check for fields if set or empty
-    if(empty($_POST['chamaId']) or empty($_POST['loanAmount'])or empty($_POST['loanRepayPeriod'])){
+    if(empty($_POST['loanAmount'])or empty($_POST['loanRepayPeriod'])){
 
         $response['error']=true;
         $response['message']="Missing Fields";
     
     }else{
-
-        if (isset($_SESSION['username'])) { 
             
         //sanitize the inputs
         $loanAmount = htmlspecialchars($_POST['loanAmount'], ENT_QUOTES, 'UTF-8');
@@ -29,9 +27,11 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
         $db= new DbOperation();
 
         $chamaId = $_GET['chama_id'];
+        $userId = $_GET['user_id'];
 
             if($db->requestLoan(
             $chamaId,
+            $userId,
             $loanAmount,
             $loanRepayPeriod
         )){
@@ -39,10 +39,6 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
             $response['message']="Loan Requested Successfully";
         }
 
-}else{
-    $response['error']=true;
-    $response['message']="Pleasee login";
-}
     }
 }else{
     $response['error']=true;

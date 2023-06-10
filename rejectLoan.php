@@ -24,12 +24,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $response['error'] = true;
                 $response['message'] = "This record doesn't exist";
             } else {
-                if ($db->approveLoan($chamaId, $loanId, $userId)) {
+                if ($db->rejectLoan($chamaId, $loanId, $userId)) {
                     $response['error'] = false;
-                    $response['message'] = "Loan Approved Successfully";
+                    $response['message'] = "Loan Rejected Successfully";
                 } else {
                     $response['error'] = true;
-                    $response['message'] = "Error Approving Loan";
+                    $response['message'] = "Error Rejecting Loan";
                 }
             }
         } else {

@@ -20,7 +20,7 @@
         $password=password_hash($pass, PASSWORD_DEFAULT);
 
         $stmt= $this->con->prepare("INSERT INTO `user` (`first_name`, `last_name`, `username`, `phone_number`, `email`, `gender`, `password`, `role`, `created_at`) VALUES( ?, ?, ?, ?, ?, ?, ? , 'user', NOW());");
-        $stmt->bind_param("ssssssss",$firstName,$lastName,$userName,$phoneNumber,$email,$gender,$password);
+        $stmt->bind_param("sssssss",$firstName,$lastName,$userName,$phoneNumber,$email,$gender,$password);
     
          if($stmt->execute()){
             return true;
@@ -164,7 +164,7 @@
 
     //CRUD for chamas
 
-    public function createChama($chama_name, $description,$user_id, $contribution_period, $system_flow,$contribution_target) {
+    public function createChama($chama_name, $description,$user_id, $contribution_period, $contribution_target,$system_flow) {
     
         // Prepare statement to insert chama into chama table
         $stmt = $this->con->prepare("INSERT INTO `chama` ( `chama_name`, `chama_description`, `chairperson_id`, `contribution_period`,`contribution_target`, `system_flow`, `created_at`) VALUES ( ?, ?, ?, ?, ?, ?, NOW())");
@@ -184,11 +184,23 @@
     
         return false;
     }
+
+    public function updateChama($chamaName, $chamaDescription, $contributionPeriod, $contributionTarget, $systemFlow,$chamaId) {
+
+        $stmt = $this->con->prepare("UPDATE chama SET chama_name = ?, chama_description = ?, contribution_period = ?, contribution_target = ?, system_flow = ?, updated_at = NOW() WHERE chama_id = ?");
+        $stmt->bind_param("sssssi", $chamaName, $chamaDescription, $contributionPeriod, $contributionTarget, $systemFlow, $chamaId);
+    
+        if ($stmt->execute()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
      
     //function to fetch a single chama 
-    public function getChama($chama_id){
+    public function getChama($chamaId){
         $stmt = $this->con->prepare("SELECT * FROM chama WHERE chama_id = ?");
-        $stmt->bind_param("i", $chama_id);
+        $stmt->bind_param("i", $chamaId);
         $stmt->execute();
         $result = $stmt->get_result();
         return $result->fetch_assoc();
@@ -215,17 +227,6 @@
         $row = $result->fetch_assoc();
         $totalCount = $row['total_count'];
         return $totalCount;
-    }
-
-    public function updateChama($id, $chama_name, $description) {
-        $stmt = $this->con->prepare("UPDATE chama SET chama_name = ?, description = ? WHERE chama_id = ?");
-        $stmt->bind_param("ssi", $chama_name, $description, $id);
-    
-        if ($stmt->execute()) {
-            return true;
-        } else {
-            return false;
-        }
     }
 
     public function addUserToChama($chama_id, $user_id){
@@ -320,6 +321,30 @@
         return $stmt->num_rows > 0;
     }
 
+    public function checkSystemFlow($chamaId) {
+        $stmt = $this->con->prepare("SELECT system_flow FROM chama WHERE chama_id = ?");
+        $stmt->bind_param("s", $chamaId);
+        $stmt->execute();
+        $stmt->store_result();
+    
+        if ($stmt->num_rows > 0) {
+            $stmt->bind_result($systemFlow);
+            $stmt->fetch();
+            $stmt->close();
+            
+            // Return the system flow type as a string
+            if ($systemFlow === 'merry-go-round') {
+                return "merry-go-round";
+            } elseif ($systemFlow === 'linear') {
+                return "linear";
+            } else {
+                return "unknown";
+            }
+        }
+    
+        return "not_found";
+    }
+    
     public function getUserJoinedChamas($userId) {
         $stmt = $this->con->prepare("SELECT chama.* FROM chama INNER JOIN chamamembers ON chama.chama_id = chamamembers.chama_id WHERE chamamembers.user_id = ?");
         $stmt->bind_param("i", $userId);
@@ -333,8 +358,7 @@
         return $chamas;
     }
 
-    public function makeContribution($chamaId, $userId,$contributionAmount) {
-
+    public function makeContribution($chamaId, $userId, $contributionAmount) {
         // Get the current datetime in MySQL datetime format
         $contributedAt = date('Y-m-d H:i:s');
     
@@ -353,33 +377,57 @@
         }
     
         $nextContributionDate = date('Y-m-d H:i:s', strtotime("+{$contributionPeriod} days", strtotime($contributedAt))); 
-        
+    
     
         // Insert the contribution into the database
         $stmt = $this->con->prepare("INSERT INTO `contributions` (`chama_id`, `user_id`, `contribution_amount`, `contribution_date`, `next_contribution_date`) VALUES (?, ?, ?, ?, ?)");
         $stmt->bind_param("iidss", $chamaId, $userId, $contributionAmount, $contributedAt, $nextContributionDate);
     
         if ($stmt->execute()) {
-            return true;
+            $contributedId = $stmt->insert_id;
+    
+            // Get the contribution details from the database
+            $stmt = $this->con->prepare("SELECT * FROM `contributions` WHERE `contribution_id` = ?");
+            $stmt->bind_param("i", $contributedId);
+            if (!$stmt->execute()) {
+                throw new Exception("Error executing the SELECT statement: " . $stmt->error);
+            } else {
+                $result = $stmt->get_result();
+                if ($result->num_rows === 0) {
+                    throw new Exception("No results found for contribution ID: " . $contributedId);
+                } else {
+                    $contribution = $result->fetch_assoc();
+    
+                    // Send a notification about the contribution
+                    $notificationTitle="Contribution";
+                    $notificationContent = "A new contribution of {$contributionAmount} has been made.";
+                    $this->sendChamaNotification($chamaId, $userId, $notificationContent, $notificationTitle);
+    
+                    return $contribution;
+                }
+            }
         } else {
             return false;
         }
     }
     
     
+    
+    
 
     //function to fetch a single contribution 
-    public function getMemberContribution($userId,$chamaId){
-        $stmt = $this->con->prepare("SELECT * FROM contributions WHERE user_id = ? AND chama_id=? ");
-        $stmt->bind_param("ii", $userId,$chamaId);
+    public function getMemberContribution($contributionId){
+        $stmt = $this->con->prepare("SELECT * FROM contributions WHERE contribution_id = ?");
+        $stmt->bind_param("i", $contributionId);
         $stmt->execute();
         $result = $stmt->get_result();
         return $result->fetch_assoc();
     }
     
     //function to fetch all contributions
-    public function getAllContributions(){
-        $stmt = $this->con->prepare("SELECT * FROM contributions");
+    public function getAllContributions($chamaId){
+        $stmt = $this->con->prepare("SELECT * FROM contributions WHERE chama_id=?");
+        $stmt->bind_param("i",$chamaId);
         $stmt->execute();
         $result = $stmt->get_result();
         $contributions = array();
@@ -400,13 +448,7 @@
         }
     }
 
-    public function makeWithdrawal($chamaId, $withdrwalAmount, $withdrwalReason) {
-        // Get the current datetime in MySQL datetime format
-        $withdrewAt = date('Y-m-d H:i:s');
-
-
-        //get user_id from currently logged in user
-        $userId = $_SESSION['userId'];
+    public function makeWithdrawal($chamaId, $userId , $withdrawalAmount, $withdrawalReason) {
 
         // Get the role of the logged in user in the specified chama
         $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE chama_id = ? AND user_id = ?");
@@ -422,17 +464,24 @@
             }
         }
     
-        if ($loggedInUserRole == 'Chairperson' || $loggedInUserRole == 'Treasurer') {
+        if ( $loggedInUserRole == 'Treasurer') {
+
 
         // Insert the withdrawals into the database
-        $stmt = $this->con->prepare("INSERT INTO `withdrawals` (`chama_id`, `user_id`, `withdrawal_amount`, `withdrawal_date`, `withdrawal_reason`) VALUES (?, ? , ?, ?, ?)");
-        $stmt->bind_param("iidss", $chamaId, $userId, $withdrwalAmount, $withdrewAt, $withdrwalReason);
-    
-        if ($stmt->execute()) {
-            return true;
-         } else {
-            return false;
-            }
+        $stmt = $this->con->prepare("INSERT INTO `withdrawals` (`chama_id`, `user_id`, `withdrawal_amount`, `withdrawal_date`, `withdrawal_reason`) VALUES (?, ? , ?, NOW() , ?)");
+        $stmt->bind_param("iids", $chamaId, $userId, $withdrawalAmount, $withdrawalReason);
+
+            if($this->getTotalChamaFunds($chamaId)< $withdrawalAmount){
+                throw new Exception("You dont have Sufficient funds to make this Transaction:".$chamaId);
+            }else{
+            if ($stmt->execute()) {
+                return true;
+            } else {
+                return false;
+                }
+            }   
+        }else{
+            throw new Exception("You dont have authoriization to perfom this transaction:".$chamaId);
         }
     }
     
@@ -446,13 +495,14 @@
     }
         
     //function to fetch all withdrawals
-    public function getAllWithdrawals(){
-        $stmt = $this->con->prepare("SELECT * FROM withdrawals");
+    public function getAllWithdrawals($chamaId){
+        $stmt = $this->con->prepare("SELECT * FROM withdrawals WHERE chama_id=?");
+        $stmt->bind_param("i",$chamaId);
         $stmt->execute();
         $result = $stmt->get_result();
         $withdrawals = array();
         while($withdrawal = $result->fetch_assoc()){
-           array_push($withdrawals, $withdrawal);
+        array_push($withdrawals, $withdrawal);
         }
         return $withdrawals;
     }
@@ -488,18 +538,38 @@
         }
     }
 
-    public function chargeFine($chamaId, $userId, $fineAmount, $fineReason) {
-        
-        // Insert the fines into the database
-        $stmt = $this->con->prepare("INSERT INTO `fines` (`chama_id`, `user_id`, `fine_amount`, `fine_reason`, `date_fined`, `fine_status`) VALUES (?, ?, ?, ?, NOW(), 'Not Paid')");
-        $stmt->bind_param("iids", $chamaId, $userId, $fineAmount, $fineReason);
+public function chargeFine($chamaId, $userIds, $fineAmount, $fineReason) {
+    $chargedFines = array();
     
+    // Prepare the INSERT statement
+    $stmt = $this->con->prepare("INSERT INTO `fines` (`chama_id`, `user_id`, `fine_amount`, `fine_reason`, `date_fined`, `fine_status`) VALUES (?, ?, ?, ?, NOW(), 'Not Paid')");
+    
+    // Iterate over the user IDs array
+    foreach ($userIds as $userId) {
+        // Bind the parameters for each user ID
+        $stmt->bind_param("iids", $chamaId, $userId, $fineAmount, $fineReason);
         if ($stmt->execute()) {
-            return true;
-         } else {
-            return false;
+            // Get the inserted fine ID
+            $fineId = $stmt->insert_id;
+            
+            // Fetch the fine object from the database using the fine ID
+            $fine = $this->getFine($fineId);
+            if ($fine) {
+                $chargedFines[] = $fine;
+            }
         }
     }
+    
+    // Close the statement
+    $stmt->close();
+    
+    // Return the array of charged fines
+    return $chargedFines;
+}
+
+
+    
+    
     
     //function to fetch a single fine 
     public function getFine($fineId){
@@ -511,8 +581,9 @@
     }
         
     //function to fetch all fines
-    public function getAllFines(){
-        $stmt = $this->con->prepare("SELECT * FROM fines");
+    public function getAllFines($chamaId){
+        $stmt = $this->con->prepare("SELECT * FROM fines WHERE chama_id= ?");
+        $stmt->bind_param("i",$chamaId);
         $stmt->execute();
         $result = $stmt->get_result();
         $fines = array();
@@ -575,7 +646,7 @@
     }
 
     public function getTotalFines($chamaId) {
-        $stmt = $this->con->prepare("SELECT IFNULL(SUM(fine_amount), 0) as total_fines FROM fines WHERE chama_id = ?");
+        $stmt = $this->con->prepare("SELECT IFNULL(SUM(fine_amount), 0) as total_fines FROM fines WHERE chama_id = ? AND fine_status='Cleared'");
         $stmt->bind_param("i", $chamaId);
         if (!$stmt->execute()) {
             throw new Exception("Error executing the SELECT statement: " . $stmt->error);
@@ -644,29 +715,33 @@
         return false;
     }
 
-    public function createMeeting($meetingDate, $meetingTime, $meetingVenue, $meetingPurpose,$chama_id) {
+    public function createMeeting($meetingDate, $meetingTime, $meetingVenue, $meetingPurpose, $chamaId,$userId) {
         try {
-            $user_id = $_SESSION['userId'];
     
             // Get the role of the logged in user in the specified chama
             $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE chama_id = ? AND user_id = ?");
-            $stmt->bind_param("ii", $chama_id,$user_id);
+            $stmt->bind_param("ii", $chamaId, $userId);
             if (!$stmt->execute()) {
                 throw new Exception("Error executing the SELECT statement: " . $stmt->error);
             } else {
-
                 $result = $stmt->get_result();
                 if ($result->num_rows === 0) {
-                    throw new Exception("No results found for chama ID: " . $chama_id);
-                }else{
-                $loggedInUserRole = $result->fetch_assoc()['chama_role'];
+                    throw new Exception("No results found for chama ID: " . $chamaId);
+                } else {
+                    $loggedInUserRole = $result->fetch_assoc()['chama_role'];
                 }
             }
     
             // If the logged in user is the ChairPerson or Secretary of the chama, create the meeting
             if ($loggedInUserRole == 'Chairperson' || $loggedInUserRole == 'Secretary') {
-                $stmt = $this->con->prepare("INSERT INTO `meetings` (`meeting_date`, `meeting_time`, `meeting_venue`, `meeting_purpose`, `chama_id`, `created_by`) VALUES (?, ?, ?, ?, ?, $user_id)");
-                $stmt->bind_param("ssssi", $meetingDate, $meetingTime, $meetingVenue, $meetingPurpose, $chama_id);
+                // Format the meeting date
+                $meetingDate = date('Y-m-d', strtotime($meetingDate));
+    
+                // Format the meeting time
+                $meetingTime = date('H:i:s', strtotime($meetingTime));
+    
+                $stmt = $this->con->prepare("INSERT INTO `meetings` (`meeting_date`, `meeting_time`, `meeting_venue`, `meeting_purpose`, `chama_id`, `created_by`) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("ssssii", $meetingDate, $meetingTime, $meetingVenue, $meetingPurpose, $chamaId, $userId);
                 if (!$stmt->execute()) {
                     throw new Exception("Error executing the INSERT statement: " . $stmt->error);
                 } else {
@@ -678,6 +753,7 @@
             throw $e;
         }
     }
+    
 
     //function to fetch a single Meeting 
     public function getMeeting($meetingId){
@@ -689,8 +765,9 @@
     }
         
     //function to fetch all meetings
-    public function getAllMeetings(){
-        $stmt = $this->con->prepare("SELECT * FROM meetings");
+    public function getAllMeetings($chamaId){
+        $stmt = $this->con->prepare("SELECT * FROM meetings WHERE chama_id= ?");
+        $stmt->bind_param("i",$chamaId);
         $stmt->execute();
         $result = $stmt->get_result();
         $meetings = array();
@@ -731,17 +808,11 @@
         }
     }
 
-    public function requestLoan ($chamaId,$loanAmount,$loanRepayPeriod){
-
-        // Get the current datetime in MySQL datetime format
-        $date = date('Y-m-d H:i:s');
-
-        //get user_id from currently logged in user
-        $userId = $_SESSION['userId'];
+    public function requestLoan ($chamaId,$userId,$loanAmount,$loanRepayPeriod){
 
         // Insert the contribution into the database
-        $stmt = $this->con->prepare("INSERT INTO `loans` (`user_id`,`chama_id`, `loan_amount`, `loan_repayment_period`,`requested_at`, `loan_status`) VALUES (?, ?, ?, ?, ?, 'pending' )");
-        $stmt->bind_param("iidss", $userId, $chamaId, $loanAmount,$loanRepayPeriod,$date);
+        $stmt = $this->con->prepare("INSERT INTO `loans` (`user_id`,`chama_id`, `loan_amount`, `loan_repayment_period`,`requested_at`, `loan_status`) VALUES (?, ?, ?, ?, NOW() , 'pending' )");
+        $stmt->bind_param("iids", $userId, $chamaId, $loanAmount,$loanRepayPeriod);
     
         if ($stmt->execute()) {
             return true;
@@ -751,14 +822,9 @@
 
     }
 
-    public function approveLoan($chamaId, $loanId)
+    public function approveLoan($chamaId, $loanId, $userId)
     {
-        // Get the current datetime in MySQL datetime format
-        $verifiedAt = date('Y-m-d H:i:s');
-        
-        $userId = $_SESSION['userId'];
-        
-        // Get the role of the logged in user in the specified chama
+        // Get the role of the logged-in user in the specified chama
         $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE chama_id = ? AND user_id = ?");
         $stmt->bind_param("ii", $chamaId, $userId);
         if (!$stmt->execute()) {
@@ -779,39 +845,58 @@
                 throw new Exception("Error executing the SELECT statement: " . $stmt->error);
             } else {
                 $result = $stmt->get_result();
-                if ($result->num_rows > 0) {
+                if ($result->num_rows === 0) {
+                    throw new Exception('No loan found with the given ID.');
+                } else {
                     $row = $result->fetch_assoc();
                     $loanAmount = $row['loan_amount'];
                     $requestedAt = new DateTime($row['requested_at']);
                     $repaymentPeriod = new DateInterval('P' . $row['loan_repayment_period'] . 'D');
-                    if ($repaymentPeriod->d == 30) {
-                        $interestRate = 0.01;
-                    } else {
-                        $interestRate = 0.05;
-                    }
+                    $interestRate = ($repaymentPeriod->d == 30) ? 0.01 : 0.05;
                     $repaymentDueDate = $requestedAt->add($repaymentPeriod)->format('Y-m-d H:i:s');
-                } else {
-                    echo 'No loan found with the given ID.';
                 }
             }
     
             $interest = $interestRate * $loanAmount;
             $amountPayable = $loanAmount + $interest;
-            $stmt = $this->con->prepare("UPDATE loans SET loan_status = 'verified', verified_at = ?, due_at = ?, interest_rate = ?, amount_payable = ? WHERE loan_id = ?");
-            $stmt->bind_param("ssddi", $verifiedAt, $repaymentDueDate, $interestRate, $amountPayable, $loanId);
-                    
+            $stmt = $this->con->prepare("UPDATE loans SET loan_status = 'verified', verified_at = NOW() , due_at = ?, interest_rate = ?, amount_payable = ? WHERE loan_id = ?");
+            $stmt->bind_param("sddi", $repaymentDueDate, $interestRate, $amountPayable, $loanId);
+    
             if ($stmt->execute()) {
                 return true;
             } else {
-                return false;
+                throw new Exception("Error updating loan status: " . $stmt->error);
             }
+        } else {
+            throw new Exception("User does not have the required role for loan approval.");
         }
+    }
+    
+
+    public function getAllLoans($chamaId){
+        $stmt = $this->con->prepare("SELECT * FROM loans WHERE chama_id= ?");
+        $stmt->bind_param("i",$chamaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $loans = array();
+        while($loan = $result->fetch_assoc()){
+           array_push($loans, $loan);
+        }
+        return $loans;
     }
 
     //function to check if loan exists in db
     public function ifLoanExist($loanId) {
         $stmt = $this->con->prepare("SELECT loan_id FROM loans WHERE loan_id = ?");
         $stmt->bind_param("i", $loanId);
+        $stmt->execute();
+        $stmt->store_result();
+        return $stmt->num_rows > 0;
+    }
+
+    public function ifRequestExist($requestId) {
+        $stmt = $this->con->prepare("SELECT request_id FROM joinrequests WHERE request_id = ?");
+        $stmt->bind_param("i", $requestId);
         $stmt->execute();
         $stmt->store_result();
         return $stmt->num_rows > 0;
@@ -851,18 +936,28 @@
             }
         }
     }
+
+    public function memberExists($chamaId,$userId){
+        $stmt = $this->con->prepare("SELECT user_id FROM chamamembers WHERE chama_id = ? AND user_id= ? ");
+        $stmt->bind_param("ii", $chamaId,$userId);
+        if (!$stmt->execute()) {
+            throw new Exception("Error executing the SELECT statement: " . $stmt->error);
+        } else {
+            $result = $stmt->get_result();
+            if ($result->num_rows > 0) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
     
 
     public function approveToJoinChama($chamaId, $userId, $requestId)
     {
-        // Get the current datetime in MySQL datetime format
-        $acceptedAt = date('Y-m-d H:i:s');
-        
-        $admin = $_SESSION['userId'];
-        
         // Get the role of the logged in user in the specified chama
         $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE chama_id = ? AND user_id = ?");
-        $stmt->bind_param("ii", $chamaId, $admin);
+        $stmt->bind_param("ii", $chamaId, $userId);
         if (!$stmt->execute()) {
             throw new Exception("Error executing the SELECT statement: " . $stmt->error);
         } else {
@@ -875,34 +970,44 @@
         }
     
         if ($loggedInUserRole == 'Chairperson' || $loggedInUserRole == 'Treasurer' || $loggedInUserRole == 'Vice Chairperson' || $loggedInUserRole == 'Secretary') {
-
-            $stmt = $this->con->prepare("INSERT INTO `chamamembers` (`chama_id`, `user_id`, `chama_role`) VALUES (?, ?, 'Member')");
-            $stmt->bind_param("ii", $chamaId, $userId);
+            $stmt = $this->con->prepare("SELECT user_id FROM joinrequests WHERE request_id = ?");
+            $stmt->bind_param("i", $requestId);
             if (!$stmt->execute()) {
-                throw new Exception("Error executing the INSERT statement: " . $stmt->error);
-            }else{
-            return true;
-            }
-
-            $stmt = $this->con->prepare("UPDATE joinrequests SET join_status = 'Accepted', accepted_at = ? WHERE request_id = ?");
-            $stmt->bind_param("si", $acceptedAt, $requestId);
-                    
-            if ($stmt->execute()) {
-                return true;
+                throw new Exception("Error executing the SELECT statement: " . $stmt->error);
             } else {
-                return false;
+                $result = $stmt->get_result();
+                if ($result->num_rows === 0) {
+                    throw new Exception("No results found for request ID: " . $requestId);
+                } else {
+                    $newMember = $result->fetch_assoc()['user_id'];
+                }
             }
-
+    
+            if ($this->memberExists($chamaId, $newMember)) {
+                throw new Exception("This member already exists");
+            } else {
+                $stmt = $this->con->prepare("INSERT INTO `chamamembers` (`chama_id`, `user_id`, `chama_role`) VALUES (?, ?, 'Member')");
+                $stmt->bind_param("ii", $chamaId, $newMember);
+                if (!$stmt->execute()) {
+                    throw new Exception("Error executing the INSERT statement: " . $stmt->error);
+                } else {
+                    $stmt = $this->con->prepare("UPDATE joinrequests SET join_status = 'Accepted', accepted_at = NOW() WHERE request_id = ?");
+                    $stmt->bind_param("i", $requestId);
+                    if ($stmt->execute()) {
+                        return true;
+                    } else {
+                        throw new Exception("Error updating the join request: " . $stmt->error);
+                    }
+                }
+            }
         }
+        
+        return false;
     }
+    
+    
 
-    public function rejectLoan ($chamaId, $loanId){
-
-        // Get the current datetime in MySQL datetime format
-        $rejectedAt = date('Y-m-d H:i:s');
-
-        //get user_id from currently logged in user
-        $userId = $_SESSION['userId'];
+    public function rejectLoan ($chamaId, $loanId,$userId){
 
         // Get the role of the logged in user in the specified chama
         $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE chama_id = ? AND user_id = ?");
@@ -921,8 +1026,8 @@
         if ($loggedInUserRole == 'Chairperson' || $loggedInUserRole == 'Treasurer') {
 
         // update status
-        $stmt = $this->con->prepare("UPDATE loans SET loan_status = 'rejected', rejected_at = ? WHERE loan_id = ?");
-        $stmt->bind_param("si", $rejectedAt, $loanId);
+        $stmt = $this->con->prepare("UPDATE loans SET loan_status = 'rejected', rejected_at = NOW() WHERE loan_id = ?");
+        $stmt->bind_param("i", $loanId);
                 
         if ($stmt->execute()) {
             return true;
@@ -933,13 +1038,7 @@
 
     }
 
-    public function rejectToJoinChama ($chamaId, $requestId){
-
-        // Get the current datetime in MySQL datetime format
-        $rejectedAt = date('Y-m-d H:i:s');
-
-        //get user_id from currently logged in user
-        $userId = $_SESSION['userId'];
+    public function rejectToJoinChama ($chamaId, $userId, $requestId){
 
         // Get the role of the logged in user in the specified chama
         $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE chama_id = ? AND user_id = ?");
@@ -958,8 +1057,8 @@
         if ($loggedInUserRole == 'Chairperson' || $loggedInUserRole == 'Treasurer' || $loggedInUserRole == 'Vice Chairperson' || $loggedInUserRole == 'Secretary') {
 
         // update status 
-        $stmt = $this->con->prepare("UPDATE joinrequests SET join_status = 'Rejected', rejected_at = ? WHERE request_id = ?");
-        $stmt->bind_param("si", $rejectedAt, $requestId);
+        $stmt = $this->con->prepare("UPDATE joinrequests SET join_status = 'Rejected', rejected_at = NOW() WHERE request_id = ?");
+        $stmt->bind_param("i", $requestId);
                 
         if ($stmt->execute()) {
             return true;
@@ -970,12 +1069,156 @@
 
     }
 
-    public function updateRole ($chamaId, $memberId, $chamaRole){
-        try {
-        //get user_id from currently logged in user
-        $userId = $_SESSION['userId'];
+    public function LeadershipRole($memberId) {
+        $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE member_id= ? ");
+        $stmt->bind_param("i", $memberId);
+        $stmt->execute();
+        $role = $stmt->store_result();
+        $stmt->bind_result($role);
 
-        // Get the role of the logged in user in the specified chama
+        while ($stmt->fetch()) {
+            if ($role === 'Chairperson' || $role === 'Vice Chairperson' || $role === 'Secretary' || $role === 'Treasurer') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function updateRole($chamaId, $memberId, $chamaRole,$userId)
+    {
+        try {
+    
+            // Check if the member already has a leadership role
+            if ($this->LeadershipRole($memberId)) {
+                throw new Exception("The member already has a leadership role in the chama.");
+            }
+    
+            // Get the role of the logged in user in the specified chama
+            $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE chama_id = ? AND user_id = ?");
+            $stmt->bind_param("ii", $chamaId, $userId);
+            if (!$stmt->execute()) {
+                throw new Exception("Error executing the SELECT statement: " . $stmt->error);
+            } else {
+                $result = $stmt->get_result();
+                if ($result->num_rows === 0) {
+                    throw new Exception("No results found for chama ID: " . $chamaId);
+                } else {
+                    $loggedInUserRole = $result->fetch_assoc()['chama_role'];
+                }
+            }
+    
+            if ($loggedInUserRole == 'Chairperson' || $loggedInUserRole == 'Vice ChairPerson') {
+                // Check if the role is already assigned
+                $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE chama_id = ? AND chama_role = ?");
+                $stmt->bind_param("is", $chamaId, $chamaRole);
+                if (!$stmt->execute()) {
+                    throw new Exception("Error executing the SELECT statement: " . $stmt->error);
+                } else {
+                    $result = $stmt->get_result();
+                    if ($result->num_rows > 0) {
+                        throw new Exception("The role is already assigned to another member.");
+                    }
+                }
+    
+                // Change the role
+                $stmt = $this->con->prepare("UPDATE chamamembers SET chama_role = ? WHERE member_id = ?");
+                $stmt->bind_param("si", $chamaRole, $memberId);
+                if ($stmt->execute()) {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+    
+            return false;
+        } catch (Exception $e) {
+            throw $e;
+        }
+    }
+
+    public function makeChairperson($chamaId, $memberId, $userId)
+    {
+        try {
+            // Check if the logged-in user is the chairperson
+            $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE chama_id = ? AND user_id = ?");
+            $stmt->bind_param("ii", $chamaId, $userId);
+            if (!$stmt->execute()) {
+                throw new Exception("Error executing the SELECT statement: " . $stmt->error);
+            } else {
+                $result = $stmt->get_result();
+                if ($result->num_rows === 0) {
+                    throw new Exception("No results found for chama ID: " . $chamaId);
+                } else {
+                    $loggedInUserRole = $result->fetch_assoc()['chama_role'];
+                }
+            }
+            
+            // Check if the logged-in user is the chairperson
+            if ($loggedInUserRole !== 'Chairperson') {
+                throw new Exception("Only the chairperson can assign a new chairperson.");
+            }
+    
+            // Get the current chairperson ID
+            $stmt = $this->con->prepare("SELECT chairperson_id FROM chama WHERE chama_id = ?");
+            $stmt->bind_param("i", $chamaId);
+            if (!$stmt->execute()) {
+                throw new Exception("Error executing the SELECT statement: " . $stmt->error);
+            } else {
+                $result = $stmt->get_result();
+                if ($result->num_rows === 0) {
+                    throw new Exception("No results found for chama ID: " . $chamaId);
+                } else {
+                    $currentChairpersonId = $result->fetch_assoc()['chairperson_id'];
+                }
+            }
+            
+            // Get the user_id for the new chairperson
+            $stmt = $this->con->prepare("SELECT user_id FROM chamamembers WHERE member_id = ?");
+            $stmt->bind_param("i", $memberId);
+            if (!$stmt->execute()) {
+                throw new Exception("Error executing the SELECT statement: " . $stmt->error);
+            } else {
+                $result = $stmt->get_result();
+                if ($result->num_rows === 0) {
+                    throw new Exception("No results found for member ID: " . $memberId);
+                } else {
+                    $newChairpersonUserId = $result->fetch_assoc()['user_id'];
+                }
+            }
+            
+            // Update the chairperson_id in the chama table
+            $stmt = $this->con->prepare("UPDATE chama SET chairperson_id = ? WHERE chama_id = ?");
+            $stmt->bind_param("ii", $newChairpersonUserId, $chamaId);
+            if (!$stmt->execute()) {
+                throw new Exception("Error updating the chairperson in the chama table: " . $stmt->error);
+            }
+            
+            // Update the chama_role to 'Chairperson' for the new chairperson in the chamamembers table
+            $stmt = $this->con->prepare("UPDATE chamamembers SET chama_role = 'Chairperson' WHERE member_id = ?");
+            $stmt->bind_param("i", $memberId);
+            if (!$stmt->execute()) {
+                throw new Exception("Error updating the chama role to Chairperson: " . $stmt->error);
+            }
+            
+            // Update the chama_role to 'Member' for the current chairperson in the chamamembers table
+            $stmt = $this->con->prepare("UPDATE chamamembers SET chama_role = 'Member' WHERE member_id = ?");
+            $stmt->bind_param("i", $currentChairpersonId);
+            if (!$stmt->execute()) {
+                throw new Exception("Error updating the chama role to Member for the current chairperson: " . $stmt->error);
+            }
+            
+            return true;
+        } catch (Exception $e) {
+            throw $e;
+        }
+    }
+    
+
+    public function demoteLeader($chamaId, $memberId, $userId)
+{
+    try {
+        // Check if the logged-in user is the chairperson
         $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE chama_id = ? AND user_id = ?");
         $stmt->bind_param("ii", $chamaId, $userId);
         if (!$stmt->execute()) {
@@ -988,24 +1231,45 @@
                 $loggedInUserRole = $result->fetch_assoc()['chama_role'];
             }
         }
-    
-        if ($loggedInUserRole == 'Chairperson') {
-
-                //change role
-                $stmt = $this->con->prepare("UPDATE chamamembers SET chama_role = ? WHERE member_id = ?");
-                $stmt->bind_param("si", $chamaRole, $memberId);
-                        
-                if ($stmt->execute()) {
-                    return true;
-                } else {
-                    return false;
-                }
-            }
-            return false;
-        } catch (Exception $e) {
-            throw $e;
+        
+        // Check if the logged-in user is the chairperson
+        if ($loggedInUserRole !== 'Chairperson') {
+            throw new Exception("Only the chairperson can demote leaders.");
         }
+        
+        // Check if the member to be demoted is the chairperson
+        $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE member_id = ?");
+        $stmt->bind_param("i", $memberId);
+        if (!$stmt->execute()) {
+            throw new Exception("Error executing the SELECT statement: " . $stmt->error);
+        } else {
+            $result = $stmt->get_result();
+            if ($result->num_rows === 0) {
+                throw new Exception("No results found for member ID: " . $memberId);
+            } else {
+                $memberRole = $result->fetch_assoc()['chama_role'];
+            }
+        }
+        
+        // Check if the member to be demoted is the chairperson
+        if ($memberRole === 'Chairperson') {
+            throw new Exception("The chairperson cannot be demoted.");
+        }
+        
+        // Demote the leader by setting the chama_role to 'Member'
+        $stmt = $this->con->prepare("UPDATE chamamembers SET chama_role = 'Member' WHERE member_id = ?");
+        $stmt->bind_param("i", $memberId);
+        if (!$stmt->execute()) {
+            throw new Exception("Error demoting the leader: " . $stmt->error);
+        }
+        
+        return true;
+    } catch (Exception $e) {
+        throw $e;
     }
+}
+
+    
 
     public function performAllocation($chamaId)
     {
@@ -1064,7 +1328,7 @@
     
     
     public function getMemberLoans($chamaId,$userId){
-        $stmt = $this->con->prepare("SELECT * FROM loans  WHERE chama_id = ? AND user_id=? ");
+        $stmt = $this->con->prepare("SELECT * FROM loans  WHERE chama_id = ? AND user_id=?");
         $stmt->bind_param("ii", $chamaId,$userId);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -1073,6 +1337,30 @@
             $loans[] = $row;
         }
         return $loans;
+    }
+
+    public function getMemberLoanRequests($chamaId){
+        $stmt = $this->con->prepare("SELECT * FROM loans  WHERE  loan_status='pending' AND chama_id=? ");
+        $stmt->bind_param("i",$chamaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $loans = array();
+        while ($row = $result->fetch_assoc()){
+            $loans[] = $row;
+        }
+        return $loans;
+    }
+
+    public function getJoinRequests($chamaId){
+        $stmt = $this->con->prepare("SELECT * FROM joinrequests  WHERE  join_status='Pending' AND chama_id=? ");
+        $stmt->bind_param("i",$chamaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $requests = array();
+        while ($request = $result->fetch_assoc()){
+            $requests[] = $request;
+        }
+        return $requests;
     }
 
     public function getMemberContributions($chamaId,$userId){
@@ -1098,56 +1386,102 @@
         }
         return $fines;
     }
-
-
-
-    // public function sendNotification($memberId, $notificationContent) {
-    //     $url = "https://your-app.com/send_notification.php";
-
-    //     $data = array(
-    //         'memberId' => $memberId,
-    //         'notificationContent' => $notificationContent
-    //     );
-        
-    //     // Make the API request using cURL
-    //     $ch = curl_init($url);
-    //     curl_setopt($ch, CURLOPT_POST, true);
-    //     curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-    //     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    //     $response = curl_exec($ch);
-    //     curl_close($ch);
-        
-    //     return $response;
-    // }
     
-    // // Example usage in the sendContributionNotification() function
-    // public function sendContributionNotification($chamaId, $userId, $contributionAmount) {
-    //     // Retrieve the member list
-    //     $members = $this->getChamaMembers($chamaId);
-        
-    //     // Get the name of the member making the contribution
-    //     $contributorName = $this->getMemberName($userId);
-        
-    //     // Generate the notification content
-    //     $notificationContent = "Member {$contributorName} has made a contribution of {$contributionAmount}.";
-        
-    //     // Send the notification to all members
-    //     foreach ($members as $member) {
-    //         $memberId = $member['member_id'];
-            
-    //         // Skip sending notification to the contributor
-    //         if ($memberId == $userId) {
-    //             continue;
-    //         }
+    public function isTreasurer($userId,$chamaId) {
+        $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE user_id = ? AND chama_id= ? ");
+        $stmt->bind_param("ii", $userId, $chamaId);
+        $stmt->execute();
+        $role = $stmt->store_result();
+        $stmt->bind_result($role);
 
-    //         $this->sendNotification($memberId, $notificationContent);
+        while ($stmt->fetch()) {
+            if ( $role === 'Treasurer') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function isSecretary($userId,$chamaId) {
+        $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE user_id = ? AND chama_id= ? ");
+        $stmt->bind_param("ii", $userId, $chamaId);
+        $stmt->execute();
+        $role = $stmt->store_result();
+        $stmt->bind_result($role);
+
+        while ($stmt->fetch()) {
+            if ( $role === 'Secretary') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function isChairOrVice($userId,$chamaId) {
+        $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE user_id = ? AND chama_id= ? ");
+        $stmt->bind_param("ii", $userId, $chamaId);
+        $stmt->execute();
+        $role = $stmt->store_result();
+        $stmt->bind_result($role);
+
+        while ($stmt->fetch()) {
+            if ($role === 'Chairperson' || $role === 'Vice ChairPerson') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+            
+
+    public function sendChamaNotification($chamaId, $userId, $notificationContent,$notificationTitle) {
+        // Generate a unique notification ID
+        $notificationId = uniqid();
+    
+        // Insert the notification into the notifications table
+        $stmt = $this->con->prepare("INSERT INTO notifications (chama_id, user_id, notification_id, notification_content, notification_title) VALUES (?, ?, ?, ?, ?)");
+        $stmt->bind_param("iiiss", $chamaId, $userId, $notificationId, $notificationContent,$notificationTitle);
+    
+        if ($stmt->execute()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+    
+    public function getAllNotifications($chamaId){
+        $stmt = $this->con->prepare("SELECT * FROM notifications WHERE chama_id=?");
+        $stmt->bind_param("i",$chamaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $notifications = array();
+        while($notification = $result->fetch_assoc()){
+        array_push($notifications, $notification);
+        }
+        return $notifications;
+    }
+    
+    // public function leaveChama($chamaId, $userId) {
+    //     // Check if the user is the chairperson
+    //     if ($this->is($userId, $chamaId)) {
+    //         throw new Exception("You cannot leave the chama as the chairperson.");
     //     }
+        
+    //     // Delete the user's membership record from the chamaMembers table
+    //     $stmt = $this->con->prepare("DELETE FROM chamaMembers WHERE chama_id = ? AND user_id = ?");
+    //     $stmt->bind_param("ii", $chamaId, $userId);
+    //     if (!$stmt->execute()) {
+    //         throw new Exception("Error executing the DELETE statement: " . $stmt->error);
+    //     }
+        
+    //     // Perform any necessary updates or notifications
+    //     $this->updateChamaMembersList();
+        
+    //     // Return a success message or status
+    //     return "Successfully left the chama.";
     // }
-    
-            
-
-
-    
         
     
 

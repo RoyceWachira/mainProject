@@ -13,7 +13,7 @@ $response= array();
 if($_SERVER['REQUEST_METHOD']=='POST'){
 
     //check for fields if set or empty
-    if(empty($_POST['contribution_amount'])){
+    if(empty($_POST['withdrawalReason']) || empty($_POST['withdrawalAmount'])){
 
         $response['error']=true;
         $response['message']="Missing Fields";
@@ -21,7 +21,8 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
     }else{
             
         //sanitize the inputs
-        $contribution_amount = htmlspecialchars($_POST['contribution_amount'], ENT_QUOTES, 'UTF-8');  
+        $withdrawalAmount = htmlspecialchars($_POST['withdrawalAmount'], ENT_QUOTES, 'UTF-8');  
+        $withdrawalReason = htmlspecialchars($_POST['withdrawalReason'], ENT_QUOTES, 'UTF-8');  
 
         $db= new DbOperation();
 
@@ -29,20 +30,22 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
         $userId=$_GET['user_id'];
 
         if ($db) {
-            $contribution = $db->makeContribution($chamaId,$userId,$contribution_amount);
+            try{
+            $withdrawal = $db->makeWithdrawal($chamaId,$userId,$withdrawalAmount,$withdrawalReason);
 
-            if($contribution){
+            if($withdrawal){
             $response['error']=false;
-            $response['message']=$contribution;
+            $response['message']=$withdrawal;
         }else{
             $response['error']=true;
             $response['message']="Error making contribution";
         }
-        }else{
-            
-        }
-
+    } catch (Exception $e) {
+        $response['error'] = true;
+        $response['message'] = "Error: " . $e->getMessage();
     }
+}}
+    
 }else{
     $response['error']=true;
     $response['message']="Invalid Request";

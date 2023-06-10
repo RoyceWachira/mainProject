@@ -12,16 +12,6 @@ $response= array();
 //check for correct request method
 if($_SERVER['REQUEST_METHOD']=='POST'){
 
-    //check for fields if set or empty
-    if(empty($_POST['chamaRole'])){
-
-        $response['error']=true;
-        $response['message']="Missing Fields";
-    
-    }else{
-            
-        //sanitize the inputs
-        $chamaRole = htmlspecialchars($_POST['chamaRole'], ENT_QUOTES, 'UTF-8');
         try {
             $db = new DbOperation();
     
@@ -30,17 +20,16 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
         $memberId = $_GET['member_id'];
         $userId= $_GET['user_id'];
 
-            if($db->updateRole(
+            if($db->makeChairperson(
             $chamaId,
             $memberId,
-            $chamaRole,
             $userId
         )){
             $response['error']=false;
-            $response['message']="Role Updated Successfully";
+            $response['message']="New ChairPerson changed Successfully";
         }else{
             $response['error'] = true;
-            $response['message'] = "Error Approving member";
+            $response['message'] = "Error changing Chairperson";
         }
     }else{
         $response['error'] = true;
@@ -51,7 +40,7 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
         $response['message'] = $e->getMessage();
     }
 
-    }
+
 }else{
     $response['error']=true;
     $response['message']="Invalid Request";

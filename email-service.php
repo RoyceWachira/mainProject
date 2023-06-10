@@ -33,8 +33,7 @@ class EmailUtilsOperation
         }
 
         if (!$userId) {
-            echo "User with email $email not found.";
-            return;
+            throw new Exception("User with this email $email not found");
         }
 
         // generate a random token
@@ -55,7 +54,7 @@ class EmailUtilsOperation
         $mail = new PHPMailer(true);
 
         try {
-            $mail->SMTPDebug  = 2;
+            $mail->SMTPDebug  = 0;
             $mail->isSMTP(); // Set mailer to use SMTP
             $mail->Host = 'smtp.gmail.com'; // Specify main and backup SMTP servers
             $mail->SMTPAuth=true;
@@ -82,105 +81,65 @@ class EmailUtilsOperation
             $mail->Body = $email_template;
 
             if (!$mail->send()) {
-                echo 'Mailer Error: ' . $mail->ErrorInfo;
                 return false;
             } else {
-                echo 'An email has been sent to your email address';
                 return true;
             }
 
         } catch (Exception $e) {
             echo "Message could not be sent. Mailer Error: {$mail->ErrorInfo}";
         }
-
     }
-}
-if (isset($_POST['password_reset'])){
-    $new_password= mysqli_real_escape_string($this->con,$_POST['password']);
-    $confirm_password= mysqli_real_escape_string($this->con, $_POST['cpassword']);
-    $token= mysqli_real_escape_string($this->con, $_POST['password_token']);
-    $response = array();
-    $time = date('Y-m-d H:i:s');
-    if(!empty($token)){
-        if(!empty($new_password) && !empty($confirm_password)){
-         $stmt= $this->con->prepare("SELECT expirationDate, user_id FROM reset_password_tokens WHERE token = ? ");
-         $stmt->bind_param("s", $token); 
-         if (!$stmt->execute()) {
-            throw new Exception("Error executing the SELECT statement: " . $stmt->error);
-        } else {
-            $stmt->bind_result($expiry, $userID);
-            $stmt->fetch();
-            $stmt->close();
-        }
-         if($time < $expiry){
-            if($new_password== $confirm_password){
-                $stmt = $this->con->prepare("UPDATE user SET password='$new_password' WHERE user_id = ? ");
-                $stmt->bind_param("s", $userID);
-                $stmt->execute();
-                $response['error'] = false;
-                $response['message'] = 'New Password Updated Successfully...';
-            }else{
-                $response['error'] = true;
-                $response['message'] = 'Password and Confirm Password do not match';
-            }
 
-         }else{
-            $response['error'] = true;
-            $response['message'] = 'Invalid Token';
-         }
-         
-        }else{
-            $response['error'] = true;
-            $response['message'] = 'Please Fill in all required fields';
-        }
-    }else{
-        $response['error'] = true;
-        $response['message'] = 'No Token Available';
-    }
-        if (isset($_POST['password_reset'])){
-            $new_password= mysqli_real_escape_string($this->con,$_POST['password']);
-            $confirm_password= mysqli_real_escape_string($this->con, $_POST['cpassword']);
-            $token= mysqli_real_escape_string($this->con, $_POST['password_token']);
+    public function resetPassword()
+    {
+        if (isset($_POST['password_reset'])) {
+            $new_password = mysqli_real_escape_string($this->con, $_POST['password']);
+            $confirm_password = mysqli_real_escape_string($this->con, $_POST['cpassword']);
+            $token = mysqli_real_escape_string($this->con, $_POST['password_token']);
             $response = array();
             $time = date('Y-m-d H:i:s');
-            if(!empty($token)){
-                if(!empty($new_password) && !empty($confirm_password)){
-                 $stmt= $this->con->prepare("SELECT expirationDate, user_id FROM reset_password_tokens WHERE token = ? ");
-                 $stmt->bind_param("s", $token); 
-                 if (!$stmt->execute()) {
-                    throw new Exception("Error executing the SELECT statement: " . $stmt->error);
-                } else {
-                    $stmt->bind_result($expiry, $userID);
-                    $stmt->fetch();
-                    $stmt->close();
-                }
-                 if($time < $expiry){
-                    if($new_password== $confirm_password){
-                        $stmt = $this->con->prepare("UPDATE user SET password='$new_password' WHERE user_id = ? ");
-                        $stmt->bind_param("s", $userID);
-                        $stmt->execute();
-                        $response['error'] = false;
-                        $response['message'] = 'New Password Updated Successfully...';
-                    }else{
-                        $response['error'] = true;
-                        $response['message'] = 'Password and Confirm Password do not match';
+            if (!empty($token)) {
+                if (!empty($new_password) && !empty($confirm_password)) {
+                    $stmt = $this->con->prepare("SELECT expirationDate, user_id FROM reset_password_tokens WHERE token = ? ");
+                    $stmt->bind_param("s", $token);
+                    if (!$stmt->execute()) {
+                        throw new Exception("Error executing the SELECT statement: " . $stmt->error);
+                    } else {
+                        $stmt->bind_result($expiry, $userID);
+                        $stmt->fetch();
+                        $stmt->close();
                     }
-
-                 }else{
-                    $response['error'] = true;
-                    $response['message'] = 'Invalid Token';
-                 }
-                 
-                }else{
+                    if ($time < $expiry) {
+                        if ($new_password == $confirm_password) {
+                            $password=password_hash($new_password, PASSWORD_DEFAULT);
+                            $stmt = $this->con->prepare("UPDATE user SET password='$password', updated_at= NOW() WHERE user_id = ? ");
+                            $stmt->bind_param("s", $userID);
+                            $stmt->execute();
+                            $response['error'] = false;
+                            $response['message'] = 'New Password Updated Successfully...';
+                        } else {
+                            $response['error'] = true;
+                            $response['message'] = 'Password and Confirm Password do not match';
+                        }
+                    } else {
+                        $response['error'] = true;
+                        $response['message'] = 'Invalid Token';
+                    }
+                } else {
                     $response['error'] = true;
                     $response['message'] = 'Please Fill in all required fields';
                 }
-            }else{
+            } else {
                 $response['error'] = true;
                 $response['message'] = 'No Token Available';
             }
-
+            echo json_encode($response);
         }
-        echo json_encode($response);
+    }
 }
+
+$emailUtils = new EmailUtilsOperation();
+$emailUtils->resetPassword();
+
 ?>

@@ -13,41 +13,37 @@ $response= array();
 if($_SERVER['REQUEST_METHOD']=='POST'){
 
     //check for fields if set or empty
-    if(empty($_POST['meetingDate']) or empty($_POST['meetingTime'])or empty($_POST['meetingVenue']) or empty($_POST['meetingPurpose']) or empty($_POST['chama_id']) ){
+    if(empty($_POST['meetingDate']) or empty($_POST['meetingTime'])or empty($_POST['meetingVenue']) or empty($_POST['meetingPurpose']) ){
 
         $response['error']=true;
         $response['message']="Missing Fields";
     
     }else{
 
-        if (isset($_SESSION['username'])) { 
             
         //sanitize the inputs
         $meetingPurpose = htmlspecialchars($_POST['meetingPurpose'], ENT_QUOTES, 'UTF-8');
-        $meetingTime = date('H-i-s',strtotime(htmlspecialchars($_POST['meetingTime'], ENT_QUOTES, 'UTF-8')));
+        $meetingTime = htmlspecialchars($_POST['meetingTime'], ENT_QUOTES, 'UTF-8');
         $meetingVenue = htmlspecialchars($_POST['meetingVenue'], ENT_QUOTES, 'UTF-8');    
-        $meetingDate = date('Y-m-d',strtotime(htmlspecialchars($_POST['meetingDate'], ENT_QUOTES, 'UTF-8')));
-        $chama_id= htmlspecialchars($_POST['chama_id'], ENT_QUOTES, 'UTF-8');
+        $meetingDate = htmlspecialchars($_POST['meetingDate'], ENT_QUOTES, 'UTF-8');
 
         $db= new DbOperation();
 
-
+        $chamaId = $_GET['chama_id'];
+        $userId = $_GET['user_id'];
 
             if($db->createMeeting(
             $meetingDate,
             $meetingTime,
             $meetingVenue,
             $meetingPurpose,
-            $chama_id   
+            $chamaId,
+            $userId
         )){
             $response['error']=false;
             $response['message']="Meeting Created Successfully";
         }
 
-}else{
-    $response['error']=true;
-    $response['message']="Pleasee login";
-}
     }
 }else{
     $response['error']=true;
