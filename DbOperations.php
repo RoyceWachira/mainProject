@@ -397,10 +397,10 @@
                     throw new Exception("No results found for contribution ID: " . $contributedId);
                 } else {
                     $contribution = $result->fetch_assoc();
-    
+                    $uname=$this->getUserName($userId);
                     // Send a notification about the contribution
                     $notificationTitle="Contribution";
-                    $notificationContent = "A new contribution of {$contributionAmount} has been made.";
+                    $notificationContent = "{$uname} has made a new contribution of Ksh.{$contributionAmount}.";
                     $this->sendChamaNotification($chamaId, $userId, $notificationContent, $notificationTitle);
     
                     return $contribution;
@@ -476,12 +476,17 @@
             }else{
             if ($stmt->execute()) {
                 return true;
+                $uname=$this->getUserName($userId);
+                // Send a notification about the contribution
+                $notificationTitle="Withdrawal";
+                $notificationContent = "{$uname} has made a new withdrawal of Ksh.{$withdrawalAmount}.";
+                $this->sendChamaNotification($chamaId, $userId, $notificationContent, $notificationTitle);
             } else {
                 return false;
                 }
             }   
         }else{
-            throw new Exception("You dont have authoriization to perfom this transaction:".$chamaId);
+            throw new Exception("You dont have authorization to perfom this transaction:".$chamaId);
         }
     }
     
@@ -557,6 +562,11 @@ public function chargeFine($chamaId, $userIds, $fineAmount, $fineReason) {
             if ($fine) {
                 $chargedFines[] = $fine;
             }
+            $uname=$this->getUserName($userId);
+            // Send a notification about the contribution
+            $notificationTitle="Fines";
+            $notificationContent = "{$uname} charged fines of Ksh.{$fineAmount} for {$fineReason}.";
+            $this->sendChamaNotification($chamaId, $userId, $notificationContent, $notificationTitle);
         }
     }
     
@@ -565,6 +575,7 @@ public function chargeFine($chamaId, $userIds, $fineAmount, $fineReason) {
     
     // Return the array of charged fines
     return $chargedFines;
+
 }
 
 
@@ -746,6 +757,11 @@ public function chargeFine($chamaId, $userIds, $fineAmount, $fineReason) {
                     throw new Exception("Error executing the INSERT statement: " . $stmt->error);
                 } else {
                     return true;
+                    $uname=$this->getUserName($userId);
+                    // Send a notification about the contribution
+                    $notificationTitle="Meeting";
+                    $notificationContent = "{$uname} has scheduled a new meeting at {$meetingVenue} on {$meetingDate} at {$meetingTime}.";
+                    $this->sendChamaNotification($chamaId, $userId, $notificationContent, $notificationTitle);
                 }
             }
             return false;
@@ -816,6 +832,11 @@ public function chargeFine($chamaId, $userIds, $fineAmount, $fineReason) {
     
         if ($stmt->execute()) {
             return true;
+            $uname=$this->getUserName($userId);
+            // Send a notification about the contribution
+            $notificationTitle="Requested Loan";
+            $notificationContent = "{$uname} has requested a soft Loan of Ksh.{$loanAmount}.";
+            $this->sendChamaNotification($chamaId, $userId, $notificationContent, $notificationTitle);
         } else {
             return false;
         }
@@ -864,6 +885,10 @@ public function chargeFine($chamaId, $userIds, $fineAmount, $fineReason) {
     
             if ($stmt->execute()) {
                 return true;
+                $uname=$this->getUserName($userId);
+                $notificationTitle="Approved loan";
+                $notificationContent = "{$loanId} has been approved by {$uname}.";
+                $this->sendChamaNotification($chamaId, $userId, $notificationContent, $notificationTitle);
             } else {
                 throw new Exception("Error updating loan status: " . $stmt->error);
             }
@@ -910,6 +935,11 @@ public function chargeFine($chamaId, $userIds, $fineAmount, $fineReason) {
     
         if ($stmt->execute()) {
             return true;
+            $uname=$this->getUserName($userId);
+            // Send a notification about the contribution
+            $notificationTitle="Join Request";
+            $notificationContent = "{$uname} has requested to join your chama.";
+            $this->sendChamaNotification($chamaId, $userId, $notificationContent, $notificationTitle);
         } else {
             return false;
         }
@@ -995,6 +1025,11 @@ public function chargeFine($chamaId, $userIds, $fineAmount, $fineReason) {
                     $stmt->bind_param("i", $requestId);
                     if ($stmt->execute()) {
                         return true;
+                        $uname=$this->getUserName($newMember);
+                        // Send a notification about the contribution
+                        $notificationTitle="Request Approval";
+                        $notificationContent = "{$uname} is now a member of this chama.";
+                        $this->sendChamaNotification($chamaId, $userId, $notificationContent, $notificationTitle);
                     } else {
                         throw new Exception("Error updating the join request: " . $stmt->error);
                     }
@@ -1031,6 +1066,10 @@ public function chargeFine($chamaId, $userIds, $fineAmount, $fineReason) {
                 
         if ($stmt->execute()) {
             return true;
+            $uname=$this->getUserName($userId);
+            $notificationTitle="Loan Rejected";
+            $notificationContent = "{$loanId} has been rejected by {$uname}.";
+            $this->sendChamaNotification($chamaId, $userId, $notificationContent, $notificationTitle);
             } else {
             return false;
             }
@@ -1062,6 +1101,10 @@ public function chargeFine($chamaId, $userIds, $fineAmount, $fineReason) {
                 
         if ($stmt->execute()) {
             return true;
+            $uname=$this->getUserName($userId);
+            $notificationTitle="Request Rejected";
+            $notificationContent = "{$requestId} has been rejected by {$uname}.";
+            $this->sendChamaNotification($chamaId, $userId, $notificationContent, $notificationTitle);
             } else {
             return false;
             }
@@ -1434,6 +1477,22 @@ public function chargeFine($chamaId, $userIds, $fineAmount, $fineReason) {
 
         return false;
     }
+
+    public function isChair($userId,$chamaId) {
+        $stmt = $this->con->prepare("SELECT chama_role FROM chamamembers WHERE user_id = ? AND chama_id= ? ");
+        $stmt->bind_param("ii", $userId, $chamaId);
+        $stmt->execute();
+        $role = $stmt->store_result();
+        $stmt->bind_result($role);
+
+        while ($stmt->fetch()) {
+            if ($role === 'Chairperson') {
+                return true;
+            }
+        }
+
+        return false;
+    }
             
 
     public function sendChamaNotification($chamaId, $userId, $notificationContent,$notificationTitle) {
@@ -1463,27 +1522,61 @@ public function chargeFine($chamaId, $userIds, $fineAmount, $fineReason) {
         return $notifications;
     }
     
-    // public function leaveChama($chamaId, $userId) {
-    //     // Check if the user is the chairperson
-    //     if ($this->is($userId, $chamaId)) {
-    //         throw new Exception("You cannot leave the chama as the chairperson.");
-    //     }
+    public function leaveChama($chamaId, $userId) {
+        // Check if the user is the chairperson
+        if ($this->isChair($userId, $chamaId)) {
+            throw new Exception("You cannot leave the chama as the chairperson.");
+        }
+
+        if ($this->getTotalPendingFinesForMemberInChama($chamaId, $userId) != NULL){
+            throw new Exception("You have a pending fine in this chama.");
+        }
+
+        if ($this->getTotalPendingLoansForMemberInChama($chamaId, $userId) != NULL){
+            throw new Exception("You have a pending loan in this chama.");
+        }
         
-    //     // Delete the user's membership record from the chamaMembers table
-    //     $stmt = $this->con->prepare("DELETE FROM chamaMembers WHERE chama_id = ? AND user_id = ?");
-    //     $stmt->bind_param("ii", $chamaId, $userId);
-    //     if (!$stmt->execute()) {
-    //         throw new Exception("Error executing the DELETE statement: " . $stmt->error);
-    //     }
-        
-    //     // Perform any necessary updates or notifications
-    //     $this->updateChamaMembersList();
-        
-    //     // Return a success message or status
-    //     return "Successfully left the chama.";
-    // }
-        
+        // Delete the user's membership record from the chamaMembers table
+        $stmt = $this->con->prepare("DELETE FROM chamaMembers WHERE chama_id = ? AND user_id = ?");
+        $stmt->bind_param("ii", $chamaId, $userId);
+        if (!$stmt->execute()) {
+            throw new Exception("Error executing the DELETE statement: " . $stmt->error);
+        }
+
+        return true;
+    }
+
+    public function getUserName($userId) {
+        $stmt = $this->con->prepare("SELECT username FROM user WHERE user_id = ?");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $stmt->bind_result($username);
+        $stmt->fetch();
+        $stmt->close();
+        return $username;
+    }
     
+    public function getTotalPendingFinesForMemberInChama($chamaId, $userId) {
+        $stmt = $this->con->prepare("SELECT IFNULL(COUNT(*),0) AS total_pending_fines FROM fines WHERE chama_id = ? AND user_id = ? AND fine_status = 'Not Paid'");
+        $stmt->bind_param("ii", $chamaId, $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $total_pending_fines = $row['total_pending_fines'];
+        return $total_pending_fines;
+    }
+    
+
+    public function getTotalPendingLoansForMemberInChama($chamaId, $userId) {
+        $stmt = $this->con->prepare("SELECT IFNULL(COUNT(*),0) AS total_member_loans FROM loans WHERE chama_id = ? AND user_id = ? AND loan_status= 'pending' ");
+        $stmt->bind_param("ii", $chamaId, $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $total_member_loans = $row['total_member_loans'];
+        return $total_member_loans;
+    }
+
 
 }
 ?>
